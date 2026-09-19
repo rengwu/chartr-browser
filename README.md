@@ -74,7 +74,9 @@ without fetching Chartr or its GPUI dependency graph. On macOS, `vendor/wry`
 uses a private crate name so its Objective-C classes cannot collide with the
 host's own Wry views; see [the patch note](vendor/wry/CHARTR-PATCH.md).
 
-Run `cargo test --workspace --locked`. With an X11 display, also run
+Run `cargo test --workspace --locked`. Package integration tests cover both
+macOS architectures and Linux shared-helper playback, crash recovery and
+teardown. With an X11 display, also run
 `cargo test -p chartr-browser-runtime --locked -- --include-ignored` for the
 native keyboard-routing regression. Follow [ACCEPTANCE.md](ACCEPTANCE.md) for
 real embedded playback, input, sizing, crash recovery and close checks.

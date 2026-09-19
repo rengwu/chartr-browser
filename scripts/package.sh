@@ -17,6 +17,8 @@ if [[ $os == linux ]]; then
     bash "$root/package-runtime.sh" "$binaries" "$package/browser-runtime"
     strip --strip-unneeded "$package/$library" "$package/chartr-browser-helper" "$package/browser-runtime/"*.so*
 else
+    mkdir -p "$package/licenses/wry"
+    cp "$root/vendor/wry/LICENSE-MIT" "$root/vendor/wry/LICENSE-APACHE" "$package/licenses/wry/"
     codesign --force --sign - "$package/$library"
 fi
 archive="chartr-plugin-$os-$arch.tar.gz"

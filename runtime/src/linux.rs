@@ -38,7 +38,7 @@ thread_local! {
     static PROFILE: RefCell<Option<tempfile::TempDir>> = const { RefCell::new(None) };
 }
 
-/// Called before the desktop application starts. Normal launches do no CEF work.
+/// Dispatch Chromium subprocess roles before starting the private control loop.
 pub fn run_subprocess() -> Option<i32> {
     if !std::env::args_os().any(|arg| arg.as_encoded_bytes().starts_with(b"--type=")) {
         return None;
@@ -170,7 +170,7 @@ fn initialize_runtime() -> Result<()> {
 
 /// Close native panes before their X11 parent disappears. The CEF UI loop is
 /// independent, so wait for OnBeforeClose while the desktop's window still exists.
-fn close_browsers(parent: Option<u32>) -> bool {
+fn close_browsers() -> bool {
     if !matches!(INITIALIZED.get(), Some(Ok(()))) {
         return true;
     }
@@ -179,7 +179,6 @@ fn close_browsers(parent: Option<u32>) -> bool {
             .lock()
             .unwrap()
             .values()
-            .filter(|(window, _)| parent.is_none_or(|parent| *window == parent))
             .map(|(_, browser)| browser.clone())
             .collect();
         for browser in browsers {
@@ -190,12 +189,7 @@ fn close_browsers(parent: Option<u32>) -> bool {
     });
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
-        if !BROWSERS
-            .lock()
-            .unwrap()
-            .values()
-            .any(|(window, _)| parent.is_none_or(|parent| *window == parent))
-        {
+        if BROWSERS.lock().unwrap().is_empty() {
             return true;
         }
         if Instant::now() >= deadline {
@@ -205,20 +199,12 @@ fn close_browsers(parent: Option<u32>) -> bool {
     }
 }
 
-pub fn close_window(parent: u32) -> bool {
-    close_browsers(Some(parent))
-}
-
-pub fn prepare_to_quit() {
-    let _ = close_browsers(None);
-}
-
-/// Shut down CEF on the initialization thread after the desktop loop returns.
+/// Shut down CEF on the initialization thread after all plugin panes close.
 pub fn shutdown_runtime() {
     if !matches!(INITIALIZED.get(), Some(Ok(()))) {
         return;
     }
-    if close_browsers(None) {
+    if close_browsers() {
         shutdown();
         PROFILE.with(|slot| slot.borrow_mut().take());
     }
