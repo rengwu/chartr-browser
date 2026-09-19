@@ -123,6 +123,42 @@ def until(check):
             return
         assert time.monotonic() < deadline, f'Timed out: {panes}'
         time.sleep(.01)
+def native_shortcut(pane):
+    # XTest generates real X11 events. Refuse to send keys unless this test's
+    # native child owns focus, so running on a desktop cannot type into another app.
+    x.XGetInputFocus.argtypes = [Handle, c.POINTER(c.c_ulong), c.POINTER(c.c_int)]
+    x.XQueryTree.argtypes = [Handle, c.c_ulong, c.POINTER(c.c_ulong), c.POINTER(c.c_ulong), c.POINTER(c.POINTER(c.c_ulong)), c.POINTER(c.c_uint)]
+    x.XFree.argtypes = [Handle]
+    def owns_focus():
+        focused, revert = c.c_ulong(), c.c_int()
+        x.XGetInputFocus(display, c.byref(focused), c.byref(revert))
+        window = focused.value
+        for _ in range(10):
+            if window == parent:
+                return True
+            if window <= 1:
+                return False
+            root, ancestor, children, count = c.c_ulong(), c.c_ulong(), c.POINTER(c.c_ulong)(), c.c_uint()
+            if not x.XQueryTree(display, window, c.byref(root), c.byref(ancestor), c.byref(children), c.byref(count)):
+                return False
+            x.XFree(children)
+            window = ancestor.value
+        return False
+    api.focus(pane['handle'], True)
+    until(owns_focus)
+    pane['ipc'] = False
+    xtest = c.CDLL('libXtst.so.6')
+    xtest.XTestFakeKeyEvent.argtypes = [Handle, c.c_uint, c.c_int, c.c_ulong]
+    x.XStringToKeysym.argtypes = [c.c_char_p]; x.XStringToKeysym.restype = c.c_ulong
+    x.XKeysymToKeycode.argtypes = [Handle, c.c_ulong]; x.XKeysymToKeycode.restype = c.c_ubyte
+    control, letter = [x.XKeysymToKeycode(display, x.XStringToKeysym(key)) for key in (b'Control_L', b'l')]
+    assert owns_focus(), 'Test view lost focus; no input sent'
+    for key, down in [(control, 1), (letter, 1), (letter, 0), (control, 0)]:
+        xtest.XTestFakeKeyEvent(display, key, down, 0)
+    x.XFlush(display)
+    until(lambda: pane['ipc'])
+    print('Native Ctrl+L routing passed', flush=True)
+
 with tempfile.TemporaryDirectory(prefix='chartr-browser-test-') as data:
     def create(number):
         instance = json.dumps({'space':'test','instance_id':number,'theme':{'page':'#202020','field':'#303030','border':'#555555','focus':'#4488ff','text':'#ffffff','muted':'#aaaaaa','uiFontSize':'14px'}}).encode()
@@ -143,6 +179,7 @@ with tempfile.TemporaryDirectory(prefix='chartr-browser-test-') as data:
         first = create(1)
         until(lambda: first['title'] == 'Playback passed' and first['ipc'])
         print('First pane playback and IPC passed', flush=True)
+        native_shortcut(first)
         original = controllers()
         assert len(original) == 1, original
         assert 'libcef.so' not in Path('/proc/self/maps').read_text()

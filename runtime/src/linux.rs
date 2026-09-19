@@ -559,6 +559,7 @@ wrap_client! {
         fn load_handler(&self) -> Option<LoadHandler> { Some(Loading::new(self.events.clone())) }
         fn request_handler(&self) -> Option<RequestHandler> { Some(Requests::new(self.events.clone())) }
         fn focus_handler(&self) -> Option<FocusHandler> { Some(Focus::new(self.events.clone())) }
+        fn keyboard_handler(&self) -> Option<KeyboardHandler> { Some(Shortcuts::new(self.events.clone())) }
         fn download_handler(&self) -> Option<DownloadHandler> { Some(Downloads::new(self.events.clone())) }
         fn on_process_message_received(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, source_process: ProcessId, message: Option<&mut ProcessMessage>) -> i32 {
             if source_process != ProcessId::RENDERER || !frame.is_some_and(|frame| frame.is_main() != 0) { return 0; }
@@ -633,6 +634,28 @@ wrap_request_handler! {
         }
         fn on_render_process_terminated(&self, _browser: Option<&mut Browser>, _status: TerminationStatus, _error_code: i32, _error_string: Option<&CefString>) {
             (self.events)(Event::Failed("This page's browser process stopped. Reload to try again.".into()));
+        }
+    }
+}
+
+// Browser shortcuts must work even when a site intercepts keys or its
+// JavaScript is busy. Handle them before Chromium sends keys to the renderer.
+wrap_keyboard_handler! {
+    struct Shortcuts { events: Events }
+    impl KeyboardHandler {
+        fn on_pre_key_event(&self, _browser: Option<&mut Browser>, event: Option<&KeyEvent>, _os_event: Option<&mut sys::XEvent>, _is_keyboard_shortcut: Option<&mut i32>) -> i32 {
+            let Some(event) = event.filter(|event| event.type_ == KeyEventType::RAWKEYDOWN) else { return 0; };
+            use sys::cef_event_flags_t as Flags;
+            let modifiers = event.modifiers & (Flags::EVENTFLAG_SHIFT_DOWN.0 | Flags::EVENTFLAG_CONTROL_DOWN.0 | Flags::EVENTFLAG_ALT_DOWN.0 | Flags::EVENTFLAG_COMMAND_DOWN.0 | Flags::EVENTFLAG_ALTGR_DOWN.0);
+            let action = if modifiers == Flags::EVENTFLAG_CONTROL_DOWN.0 {
+                match event.windows_key_code { 0x4c => "focus-address", 0x52 => "reload", _ => return 0 }
+            } else if modifiers == Flags::EVENTFLAG_ALT_DOWN.0 {
+                match event.windows_key_code { 0x25 => "back", 0x27 => "forward", _ => return 0 }
+            } else if modifiers == 0 && event.windows_key_code == 0x1b {
+                "stop"
+            } else { return 0; };
+            (self.events)(Event::Message(serde_json::json!({"action": action}).to_string()));
+            1
         }
     }
 }
