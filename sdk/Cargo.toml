@@ -7,4 +7,3 @@ description = "Small, versioned native surface interface for Chartr plugins (no 
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-

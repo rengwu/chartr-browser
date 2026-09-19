@@ -1,6 +1,8 @@
 //! Engines remain entirely plugin-owned. No GPUI or Chartr implementation types.
 use crate::{EngineEvent, pages::CONTENT_BRIDGE};
 use anyhow::{Result, bail};
+#[cfg(target_os = "macos")]
+use chartr_browser_wry as wry;
 use std::sync::Arc;
 
 type Events = Arc<dyn Fn(EngineEvent) + Send + Sync>;

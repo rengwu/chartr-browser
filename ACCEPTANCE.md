@@ -19,4 +19,3 @@ Confirm deb/Arch packages install the standard root-owned sandbox helper with
 mode 4755; source/tarball builds use user namespaces. macOS retains WKWebView
 and may retain its native network/TLS error page. DRM and proprietary codecs are
 not required for this migration.
-

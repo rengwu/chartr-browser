@@ -142,24 +142,30 @@ with tempfile.TemporaryDirectory(prefix='chartr-browser-test-') as data:
     try:
         first = create(1)
         until(lambda: first['title'] == 'Playback passed' and first['ipc'])
+        print('First pane playback and IPC passed', flush=True)
         original = controllers()
         assert len(original) == 1, original
         assert 'libcef.so' not in Path('/proc/self/maps').read_text()
         second = create(2)
         until(lambda: second['title'] == 'Playback passed' and second['ipc'])
         assert controllers() == original, 'Each pane spawned a new engine'
+        print('Two panes share one helper', flush=True)
         destroy(1)
         dispatch(second['handle'], {'type':'action','id':'reload'})
         second['title'] = ''
         until(lambda: second['title'] == 'Playback passed')
         assert controllers() == original, 'Closing a sibling stopped the shared engine'
+        print('Sibling close and surviving pane playback passed', flush=True)
         # A renderer has a compositor thread; GPU and control processes do not.
-        renderer = next(pid for pid in descendants(next(iter(original)))
-            if any(task.read_text().strip() == 'Compositor' for task in Path(f'/proc/{pid}/task').glob('*/comm')))
-        os.kill(renderer, signal.SIGKILL)
+        renderers = [pid for pid in descendants(next(iter(original)))
+            if any(task.read_text().strip() == 'Compositor' for task in Path(f'/proc/{pid}/task').glob('*/comm'))]
+        assert renderers, 'No renderer to exercise crash recovery'
+        for renderer in renderers:
+            os.kill(renderer, signal.SIGKILL)
         until(lambda: second['title'] == 'Browser')
         dispatch(second['handle'], {'type':'action','id':'reload'})
         until(lambda: second['title'] == 'Playback passed')
+        print('Renderer recovery passed', flush=True)
         destroy(2)
         until(lambda: not controllers())
         third = create(3)
