@@ -1,0 +1,17 @@
+manifest_version = 2
+id = "com.chartr.browser"
+name = "Browser"
+description = "Browse the web alongside your terminals and tools."
+version = "0.1.0"
+kind = "embedded"
+icon = "InternetIcon"
+release = "https://github.com/rengwu/chartr-browser/releases/latest/download"
+
+[libraries]
+linux-x86_64 = "libchartr_browser.so"
+macos-aarch64 = "libchartr_browser.dylib"
+macos-x86_64 = "libchartr_browser.dylib"
+
+[capabilities]
+multiplicity = "multiple"
+restorable = true

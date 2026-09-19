@@ -1,0 +1,92 @@
+name: Build and release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libglib2.0-dev libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libdbus-1-3 libcups2t64 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 libgbm1 libexpat1 libxcb1 libxkbcommon0 libcairo2 libpango-1.0-0 libudev1 libasound2t64 xvfb xauth dpkg-dev
+      - run: rustup show
+      - uses: actions/cache@v4
+        if: runner.os == 'Linux'
+        with:
+          path: target/cef
+          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime/Cargo.toml') }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo build --workspace --release --locked
+      - run: cargo test --workspace --locked
+      - run: bash scripts/package.sh target/release dist
+      - name: macOS embedding alongside host Wry
+        if: runner.os == 'macOS'
+        run: CHARTR_BROWSER_TEST_PACKAGE="$PWD/dist/package" cargo test --test macos_embedding --locked
+      - name: Linux native embedding and keyboard routing
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root dist/package/chrome-sandbox
+          sudo chmod 4755 dist/package/chrome-sandbox
+          xvfb-run -a python3 tests/linux_embedding.py dist/package
+          xvfb-run -a cargo test -p chartr-browser-runtime --locked -- --include-ignored
+      - name: Debian system package
+        if: runner.os == 'Linux'
+        run: python3 scripts/package-system.py deb dist/package dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/*.deb
+          retention-days: 14
+  arch:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - run: pacman -Syu --noconfirm --needed git python
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-Linux-X64
+          path: dist
+      - run: |
+          mkdir -p dist/package
+          tar -xzf dist/chartr-plugin-linux-x86_64.tar.gz -C dist/package
+          useradd --create-home builder
+          chown -R builder:builder dist
+          runuser -u builder -- python3 scripts/package-system.py arch dist/package dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-Arch-X64
+          path: dist/*.pkg.tar.zst
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, arch]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: dist
+      - name: Publish checked prebuilt packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "Browser $GITHUB_REF_NAME"

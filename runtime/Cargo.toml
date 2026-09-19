@@ -1,0 +1,20 @@
+[package]
+name = "chartr-browser-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "chartr-browser-helper"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cef = { version = "=152.3.0", default-features = false, features = ["sandbox", "resources"] }
+anyhow = "1"
+libc = "0.2"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+url = "2"
+tempfile = "3"
+base64 = "0.22"
+x11rb = "0.13"

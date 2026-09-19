@@ -1,0 +1,3 @@
+# One CEF SDK cache shared by checks, tests and release builds in this checkout.
+[env]
+CEF_PATH = { value = "target/cef", relative = true }
