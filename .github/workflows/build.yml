@@ -25,9 +25,14 @@ jobs:
       - uses: actions/cache@v4
         if: runner.os == 'Linux'
         with:
-          path: target/cef
-          key: cef-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime/Cargo.toml') }}
+          path: .cef
+          key: cef-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime/Cargo.toml') }}
       - uses: Swatinem/rust-cache@v2
+      - name: Restage the cached engine through its build script
+        if: runner.os == 'Linux'
+        # Rust's cache omits runtime resources beside binaries. The SDK lives
+        # outside target; touching its receipt reruns CEF's resource-copy step.
+        run: if [ -d .cef ]; then find .cef -name archive.json -exec touch {} +; fi
       - run: cargo fmt --all --check
       - run: cargo build --workspace --release --locked
       - run: cargo test --workspace --locked

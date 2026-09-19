@@ -56,7 +56,7 @@ class Page(http.server.BaseHTTPRequestHandler):
             # Title only changes after real video frames played to completion.
             body = b'''<title>Loading media</title><video autoplay muted src="/media.webm"></video><script>
 let v=document.querySelector('video');
-v.onended=()=>{document.title=v.getVideoPlaybackQuality().totalVideoFrames>0?'Playback passed':'No frames';window.ipc.postMessage(JSON.stringify({action:'focus-address'}));};
+v.onended=()=>{document.title=v.getVideoPlaybackQuality().totalVideoFrames>0?'Playback passed':'No frames';window.dispatchEvent(new KeyboardEvent('keydown',{key:'l',ctrlKey:true}));};
 v.onerror=()=>document.title='Playback error';
 </script>'''
             kind = 'text/html'
